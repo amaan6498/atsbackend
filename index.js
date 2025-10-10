@@ -3,21 +3,15 @@ import multer from "multer";
 import fs from "fs";
 import pdfParse from "pdf-parse";
 import dotenv from "dotenv";
-import fetch from "node-fetch";
-import { GoogleGenAI } from "@google/genai";
-import { log } from "console";
-
 dotenv.config();
+import { GoogleGenAI } from "@google/genai";
 
 const app = express();
 const port = 5000;
 app.use(express.json());
 const ai = new GoogleGenAI({
-  apiKey: "AIzaSyBaGBo7Sh8eaXWX1NjI2qZi7xc-DKlOwi4",
+  apiKey: process.env.API_KEY,
 });
-
-const HF_API_KEY = process.env.HF_API_KEY;
-const MODEL = "openai/gpt-oss-20b:fireworks-ai";
 
 // Set up multer for file upload
 const upload = multer({ dest: "uploads/" });
@@ -41,6 +35,7 @@ Resume Aspects to Evaluate:
 
 Output Requirements:
 - The response MUST always be in JSON format, no matter what.
+- Output ONLY valid, minified JSON. Do not include any text, markdown, or explanations. Do not use escape characters. Do not wrap the JSON in code blocks.
 
 Example JSON for a valid resume:
 {
@@ -103,35 +98,60 @@ If the resume mentions relevant titles or references such as LinkedIn, GitHub, p
 Be concise, objective, and precise.
 `;
 
-// Root route
 app.get("/", (req, res) => {
   res.send("Hello E");
 });
 
-app.post("/chatwithgemini", async (req, res) => {
-  const userInput = req.body.text; // <-- Extract the text property
-  console.log("User Input:", userInput);
+app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
+  // const { job_description, candidate_type } = req.body;
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: `${instructions} : 
+    if (!req.file) {
+      return res.status(400).json({ error: "Missing PDF file." });
+    }
 
-      ${userInput}`,
+    const buffer = fs.readFileSync(req.file.path);
+    const pdfData = await pdfParse(buffer);
+    const noQuotesText = pdfData.text.replace(/["']/g, "");
+    fs.unlinkSync(req.file.path); // Clean up uploaded file
+
+    // const prompt = `${instructions}
+    
+    // ---
+    // EVALUATION CONTEXT:
+    // job_role: "${job_description}"
+    // candidate_type: "${candidate_type}"
+    // ---
+    // RESUME CONTENT:
+    // ${noQuotesText}
+    // `
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash", 
+      contents: `${instructions} : \n\n${noQuotesText}`,
     });
 
-    // Try to parse Gemini's response as JSON
+    // The raw text from Gemini might be wrapped in ```json ... ```
+    const rawText = response.text;
+    console.log("Raw response from Gemini:", rawText);
+
     let jsonResponse;
+
     try {
-      console.log("Json Obj :", response.text);
-      jsonResponse = JSON.parse(response.text);
+      const match = rawText.match(/```json\s*([\s\S]*?)\s*```/);
+
+      // If a match is found, use the captured group (the clean JSON).
+      const textToParse = match ? match[1] : rawText;
+
+      jsonResponse = JSON.parse(textToParse);
     } catch (err) {
-      // If not valid JSON, return error and raw output
-      return res.status(200).json({
+      // If parsing fails even after cleaning, then the output is truly invalid.
+      return res.status(500).json({
         valid_resume: false,
-        error: "Gemini did not return valid JSON.",
-        raw_output: response.text,
+        error: "Gemini did not return valid JSON, even after cleaning.",
+        raw_output: rawText,
       });
     }
+
     res.json(jsonResponse);
   } catch (error) {
     console.error("Error occurred while querying Gemini:", error);
@@ -141,79 +161,6 @@ app.post("/chatwithgemini", async (req, res) => {
   }
 });
 
-// PDF upload and scoring route
-app.post("/getScore", upload.single("pdf"), async (req, res) => {
-  try {
-    const pdfBuffer = fs.readFileSync(req.file.path);
-    const pdfData = await pdfParse(pdfBuffer);
-
-    const resumeText = pdfData.text;
-    console.log("Extracted Resume Text:", resumeText);
-    // Format as a single-line JSON string for AI input
-    const userMessage = JSON.stringify({
-      resume: resumeText,
-      job_role: "Core Java Developer",
-      candidate_type: "Fresher",
-    });
-    log(userMessage);
-    const responseJson = await generateResponse(userMessage);
-    console.log(responseJson);
-
-    fs.unlinkSync(req.file.path); // Clean up uploaded file
-
-    // Send JSON output
-    res.json(responseJson);
-  } catch (error) {
-    console.error("Error during resume evaluation:", error);
-    res.status(500).json({ error: "Failed to process resume" });
-  }
-});
-
-// Function to call Hugging Face inference endpoint
-async function generateResponse(userMessage) {
-  try {
-    const response = await fetch(
-      "https://router.huggingface.co/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${HF_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          messages: [
-            { role: "system", content: instructions },
-            { role: "user", content: userMessage },
-          ],
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    const content = data?.choices?.[0]?.message?.content;
-
-    // Always return valid JSON or fallback to empty structure
-    try {
-      return JSON.parse(content);
-    } catch (parseErr) {
-      return {
-        valid_resume: false,
-        error: "Model returned non-JSON response",
-        raw_output: content,
-      };
-    }
-  } catch (err) {
-    console.error("Error calling HF API:", err);
-    return {
-      valid_resume: false,
-      error: "Failed to connect to evaluation API",
-    };
-  }
-}
-
-// Start server
 app.listen(port, () => {
   console.log(`✅ Server is running on http://localhost:${port}`);
 });
