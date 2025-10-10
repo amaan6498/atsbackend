@@ -4,11 +4,17 @@ import fs from "fs";
 import pdfParse from "pdf-parse";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
+import { GoogleGenAI } from "@google/genai";
+import { log } from "console";
 
 dotenv.config();
 
 const app = express();
 const port = 5000;
+app.use(express.json());
+const ai = new GoogleGenAI({
+  apiKey: "AIzaSyBaGBo7Sh8eaXWX1NjI2qZi7xc-DKlOwi4",
+});
 
 const HF_API_KEY = process.env.HF_API_KEY;
 const MODEL = "openai/gpt-oss-20b:fireworks-ai";
@@ -17,7 +23,7 @@ const MODEL = "openai/gpt-oss-20b:fireworks-ai";
 const upload = multer({ dest: "uploads/" });
 
 // Instructions for the language model
-const instructions =`You are a Resume Evaluation Assistant. Your task is to analyze a candidate's resume based on a provided job role and candidate type (Fresher or Experienced). You must evaluate all aspects of the resume, score it, provide ratings, breakdowns, and improvement suggestions.
+const instructions = `You are a Resume Evaluation Assistant. Your task is to analyze a candidate's resume based on a provided job role and candidate type (Fresher or Experienced). You must evaluate all aspects of the resume, score it, provide ratings, breakdowns, and improvement suggestions.
 Input:
 - "resume": a string containing the resume content.
 - "job_role": a string describing the job role.
@@ -89,16 +95,50 @@ Instructions:
 - Always return a valid JSON following the structure above.
 - Never output text outside JSON.
 - Be concise, objective, and precise.
+- I want the output as a JSON object which is divided in to sections as shown in the example and I dont want any escape sequence characters.
 - Output raw JSON only.
 
 Never output text outside JSON.
 If the resume mentions relevant titles or references such as LinkedIn, GitHub, portfolio, or project names, treat them as hyperlinks even if the actual URL is missing. Do not mark the contact section as incomplete solely due to missing URLs when the titles indicate the presence of a link.
 Be concise, objective, and precise.
-`
+`;
 
 // Root route
 app.get("/", (req, res) => {
   res.send("Hello E");
+});
+
+app.post("/chatwithgemini", async (req, res) => {
+  const userInput = req.body.text; // <-- Extract the text property
+  console.log("User Input:", userInput);
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash",
+      contents: `${instructions} : 
+
+      ${userInput}`,
+    });
+
+    // Try to parse Gemini's response as JSON
+    let jsonResponse;
+    try {
+      console.log("Json Obj :", response.text);
+      jsonResponse = JSON.parse(response.text);
+    } catch (err) {
+      // If not valid JSON, return error and raw output
+      return res.status(200).json({
+        valid_resume: false,
+        error: "Gemini did not return valid JSON.",
+        raw_output: response.text,
+      });
+    }
+    res.json(jsonResponse);
+  } catch (error) {
+    console.error("Error occurred while querying Gemini:", error);
+    res
+      .status(500)
+      .json({ error: "An error occurred while processing your request." });
+  }
 });
 
 // PDF upload and scoring route
@@ -108,14 +148,16 @@ app.post("/getScore", upload.single("pdf"), async (req, res) => {
     const pdfData = await pdfParse(pdfBuffer);
 
     const resumeText = pdfData.text;
-
-    const userMessage = `
-        resume: """${resumeText}"""
-        job_role: Core Java Developer
-        candidate_type: Fresher
-    `;
-
+    console.log("Extracted Resume Text:", resumeText);
+    // Format as a single-line JSON string for AI input
+    const userMessage = JSON.stringify({
+      resume: resumeText,
+      job_role: "Core Java Developer",
+      candidate_type: "Fresher",
+    });
+    log(userMessage);
     const responseJson = await generateResponse(userMessage);
+    console.log(responseJson);
 
     fs.unlinkSync(req.file.path); // Clean up uploaded file
 
