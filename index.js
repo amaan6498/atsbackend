@@ -1,4 +1,5 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import multer from "multer";
 import fs from "fs";
 import pdfParse from "pdf-parse";
@@ -12,6 +13,18 @@ app.use(express.json());
 const ai = new GoogleGenAI({
   apiKey: process.env.API_KEY,
 });
+
+//Rate Limiter for Limiting the IP's from excessive requests
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 100, // 100 Req limit
+  message: {
+    status: 429,
+    error: "Too many requests, please try again later."
+  }
+});
+
+app.use(limiter)
 
 // Set up multer for file upload
 const upload = multer({ dest: "uploads/" });
