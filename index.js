@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import rateLimit from "express-rate-limit";
 import multer from "multer";
 import fs from "fs";
@@ -10,6 +11,8 @@ import { GoogleGenAI } from "@google/genai";
 const app = express();
 const port = process.env.PORT || 5000;
 app.use(express.json());
+app.use(cors())
+
 const ai = new GoogleGenAI({
   apiKey: process.env.API_KEY,
 });
