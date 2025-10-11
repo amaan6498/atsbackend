@@ -36,6 +36,9 @@ Resume Aspects to Evaluate:
 Output Requirements:
 - The response MUST always be in JSON format, no matter what.
 - Output ONLY valid, minified JSON. Do not include any text, markdown, or explanations. Do not use escape characters. Do not wrap the JSON in code blocks.
+- In the output JSON, always include a "missing_skills" array listing all important skills, technologies, or qualifications required for the job_role that are missing or insufficiently covered in the resume.
+- The "missing_skills" array should be as specific as possible (e.g., "Spring Boot", "REST API development", "JUnit testing", "CI/CD pipelines", etc.).
+- If all required skills are present, return an empty array for "missing_skills".
 
 Example JSON for a valid resume:
 {
@@ -103,7 +106,7 @@ app.get("/", (req, res) => {
 });
 
 app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
-  // const { job_description, candidate_type } = req.body;
+  const { job_description, candidate_type } = req.body;
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Missing PDF file." });
@@ -114,25 +117,25 @@ app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
     const noQuotesText = pdfData.text.replace(/["']/g, "");
     fs.unlinkSync(req.file.path); // Clean up uploaded file
 
-    // const prompt = `${instructions}
+    const prompt = `${instructions}
     
-    // ---
-    // EVALUATION CONTEXT:
-    // job_role: "${job_description}"
-    // candidate_type: "${candidate_type}"
-    // ---
-    // RESUME CONTENT:
-    // ${noQuotesText}
-    // `
+    ---
+    EVALUATION CONTEXT:
+    job_role: "${job_description}"
+    candidate_type: "${candidate_type}"
+    ---
+    RESUME CONTENT:
+    ${noQuotesText}
+    `
 
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash", 
-      contents: `${instructions} : \n\n${noQuotesText}`,
+      contents: prompt,
     });
 
     // The raw text from Gemini might be wrapped in ```json ... ```
     const rawText = response.text;
-    console.log("Raw response from Gemini:", rawText);
+    // console.log("Raw response from Gemini:", rawText);
 
     let jsonResponse;
 
