@@ -16,15 +16,15 @@ const ai = new GoogleGenAI({
 
 //Rate Limiter for Limiting the IP's from excessive requests
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
+  windowMs: 15 * 60 * 1000,
   max: 100, // 100 Req limit
   message: {
     status: 429,
-    error: "Too many requests, please try again later."
-  }
+    error: "Too many requests, please try again later.",
+  },
 });
 
-app.use(limiter)
+app.use(limiter);
 
 // Set up multer for file upload
 const upload = multer({ dest: "uploads/" });
@@ -52,6 +52,7 @@ Output Requirements:
 - In the output JSON, always include a "missing_skills" array listing all important skills, technologies, or qualifications required for the job_role that are missing or insufficiently covered in the resume.
 - The "missing_skills" array should be as specific as possible (e.g., "Spring Boot", "REST API development", "JUnit testing", "CI/CD pipelines", etc.).
 - If all required skills are present, return an empty array for "missing_skills".
+- In the output JSON, always include a "present_skills" array listing all relevant skills, technologies, or qualifications from the job_role that are found in the resume. This array should be as specific as possible (e.g., "Java", "Spring Boot", "REST API development", etc.).
 
 Example JSON for a valid resume:
 {
@@ -74,6 +75,8 @@ Example JSON for a valid resume:
     "experience_projects": "Showcase at least one Java backend project (e.g., Spring Boot REST API, Servlets).",
     "achievements_extracurriculars": "Include achievements or extracurricular activities relevant to software development."
   },
+  "missing_skills": ["Spring Boot", "JUnit testing"],
+  "present_skills": ["Java", "Git"],
   "improvement_suggestions": [
     "Highlight any Java certifications or coursework (Oracle Certified Associate, Java SE).",
     "Emphasize experience with version control (Git) and CI/CD pipelines.",
@@ -119,14 +122,15 @@ app.get("/", (req, res) => {
 });
 
 app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
-  
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Missing PDF file." });
     }
 
     const data = req.body || {};
-    const job_description = data.job_description || "No job description provided. Evaluate the resume independently without JD matching";
+    const job_description =
+      data.job_description ||
+      "No job description provided. Evaluate the resume independently without JD matching";
     const candidate_type = data.candidate_type || "Fresher";
 
     const buffer = fs.readFileSync(req.file.path);
@@ -143,10 +147,10 @@ app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
     ---
     RESUME CONTENT:
     ${noQuotesText}
-    `
+    `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash", 
+      model: "gemini-2.0-flash",
       contents: prompt,
     });
 
