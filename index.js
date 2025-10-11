@@ -106,17 +106,15 @@ app.get("/", (req, res) => {
 });
 
 app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
-  let { job_description, candidate_type } = req.body;
-  if (!job_description){
-    job_description = "No job description provided. Evaluate the resume independently without JD matching"
-  }
-  if (!candidate_type){
-    candidate_type = "Fresher"
-  }
+  
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Missing PDF file." });
     }
+
+    const data = req.body || {};
+    const job_description = data.job_description || "No job description provided. Evaluate the resume independently without JD matching";
+    const candidate_type = data.candidate_type || "Fresher";
 
     const buffer = fs.readFileSync(req.file.path);
     const pdfData = await pdfParse(buffer);
