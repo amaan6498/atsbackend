@@ -11,7 +11,7 @@ import { GoogleGenAI } from "@google/genai";
 const app = express();
 const port = process.env.PORT || 5000;
 app.use(express.json());
-app.use(cors())
+app.use(cors());
 
 const ai = new GoogleGenAI({
   apiKey: process.env.API_KEY,
@@ -132,7 +132,7 @@ app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
 
     const data = req.body || {};
     const job_description =
-      data.job_description ||
+      data.job_role ||
       "No job description provided. Evaluate the resume independently without JD matching";
     const candidate_type = data.candidate_type || "Fresher";
 
