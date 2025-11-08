@@ -107,6 +107,17 @@ Evaluation Criteria:
 - Provide an overall rating based on the score.
 - Suggest improvements such as missing skills, frameworks, projects, certifications, or formatting issues.
 - Detect gaps, inconsistencies, or irrelevant content if possible.
+- For non-fresher candidates, validate that work experience section exists and is detailed. If missing or insufficient:
+  * Add to missing_sections with high priority
+  * Include in improvement_suggestions
+  * Reduce the overall score significantly
+  * Add a specific note about missing experience in the notes section
+- For experienced candidates, evaluate:
+  * Years of experience
+  * Role progression
+  * Relevance to the job role
+  * Detailed responsibilities and achievements
+
 
 Instructions:
 - Always return a valid JSON following the structure above.
