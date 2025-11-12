@@ -6,14 +6,15 @@ import fs from "fs";
 import pdfParse from "pdf-parse";
 import dotenv from "dotenv";
 dotenv.config();
-import { GoogleGenAI } from "@google/genai";
+import { OpenAI } from "openai";
 
 const app = express();
 const port = process.env.PORT || 5000;
 app.use(express.json());
 app.use(cors());
 
-const ai = new GoogleGenAI({
+const ai = new OpenAI({
+  baseURL: "https://router.huggingface.co/v1",
   apiKey: process.env.API_KEY,
 });
 
@@ -132,7 +133,7 @@ Be concise, objective, and precise.
 `;
 
 app.get("/", (req, res) => {
-  res.send("Hello E");
+  res.send("Hello There ! Welcome to ATS Validator Backend Server.");
 });
 
 app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
@@ -163,14 +164,24 @@ app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
     ${noQuotesText}
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash",
-      contents: prompt,
-    });
-
-    // The raw text from Gemini might be wrapped in ```json ... ```
-    const rawText = response.text;
-    // console.log("Raw response from Gemini:", rawText);
+    let rawText;
+    try {
+      const response = await ai.chat.completions.create({
+        model: "openai/gpt-oss-20b:groq",
+        messages: [
+          { role: "system", content: instructions },
+          { role: "user", content: prompt },
+        ],
+      });
+      rawText = response.choices?.[0]?.message?.content || response.text || "";
+    } catch (err) {
+      console.error(
+        "OpenAI/Gemini call failed (contents unsupported) — falling back to Hugging Face router:",
+        err?.message || err
+      );
+      const hfResult = await generateResponse(prompt);
+      return res.json(hfResult);
+    }
 
     let jsonResponse;
 
@@ -182,17 +193,16 @@ app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
 
       jsonResponse = JSON.parse(textToParse);
     } catch (err) {
-      // If parsing fails even after cleaning, then the output is truly invalid.
       return res.status(500).json({
         valid_resume: false,
-        error: "Gemini did not return valid JSON, even after cleaning.",
+        error: "Server did not return valid JSON, even after cleaning.",
         raw_output: rawText,
       });
     }
 
     res.json(jsonResponse);
   } catch (error) {
-    console.error("Error occurred while querying Gemini:", error);
+    console.error("Error occurred while querying Server:", error);
     res
       .status(500)
       .json({ error: "An error occurred while processing your request." });
