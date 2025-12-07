@@ -136,7 +136,7 @@ app.get("/", (req, res) => {
   res.send("Hello There ! Welcome to ATS Validator Backend Server.");
 });
 
-app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
+app.post("/audit-resume", upload.single("pdf"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: "Missing PDF file." });
@@ -151,7 +151,7 @@ app.post("/chatwithgemini", upload.single("pdf"), async (req, res) => {
     const buffer = fs.readFileSync(req.file.path);
     const pdfData = await pdfParse(buffer);
     const noQuotesText = pdfData.text.replace(/["']/g, "");
-    fs.unlinkSync(req.file.path); // Clean up uploaded file
+    fs.unlinkSync(req.file.path);
 
     const prompt = `${instructions}
     
